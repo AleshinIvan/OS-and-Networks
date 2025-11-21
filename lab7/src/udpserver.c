@@ -1,56 +1,78 @@
+#define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#define SERV_PORT 20001
-#define BUFSIZE 1024
-#define SADDR struct sockaddr
-#define SLEN sizeof(struct sockaddr_in)
-
-int main() {
-  int sockfd, n;
-  char mesg[BUFSIZE], ipadr[16];
-  struct sockaddr_in servaddr;
-  struct sockaddr_in cliaddr;
-
-  if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-    perror("socket problem");
-    exit(1);
-  }
-
-  memset(&servaddr, 0, SLEN);
-  servaddr.sin_family = AF_INET;
-  servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  servaddr.sin_port = htons(SERV_PORT);
-
-  if (bind(sockfd, (SADDR *)&servaddr, SLEN) < 0) {
-    perror("bind problem");
-    exit(1);
-  }
-  printf("SERVER starts...\n");
-
-  while (1) {
-    unsigned int len = SLEN;
-
-    if ((n = recvfrom(sockfd, mesg, BUFSIZE, 0, (SADDR *)&cliaddr, &len)) < 0) {
-      perror("recvfrom");
-      exit(1);
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <port> <bufsize>\n", argv[0]);
+        exit(EXIT_FAILURE);
     }
-    mesg[n] = 0;
 
-    printf("REQUEST %s      FROM %s : %d\n", mesg,
-           inet_ntop(AF_INET, (void *)&cliaddr.sin_addr.s_addr, ipadr, 16),
-           ntohs(cliaddr.sin_port));
+    const int PORT = atoi(argv[1]);
+    const int BUFSIZE = atoi(argv[2]);
 
-    if (sendto(sockfd, mesg, n, 0, (SADDR *)&cliaddr, len) < 0) {
-      perror("sendto");
-      exit(1);
+    if (PORT <= 0 || PORT > 65535 || BUFSIZE <= 0) {
+        fprintf(stderr, "Error: Invalid port or bufsize\n");
+        exit(EXIT_FAILURE);
     }
-  }
+
+    int sockfd;
+    struct sockaddr_in server, client;
+    char buf[BUFSIZE];
+
+    // Создание UDP сокета
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Настройка адреса сервера
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = INADDR_ANY;
+
+    // Привязка сокета
+    if (bind(sockfd, (struct sockaddr *)&server, sizeof(server)) < 0) {
+        perror("bind");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("UDP Server listening on port %d (bufsize=%d)\n", PORT, BUFSIZE);
+
+    while (1) {
+        socklen_t client_len = sizeof(client);
+        
+        // Получение датаграммы
+        ssize_t nread = recvfrom(sockfd, buf, BUFSIZE - 1, 0,
+                                  (struct sockaddr *)&client, &client_len);
+        if (nread < 0) {
+            perror("recvfrom");
+            continue;
+        }
+
+        buf[nread] = '\0';
+
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client.sin_addr, client_ip, sizeof(client_ip));
+        printf("Received %zd bytes from %s:%d: %s\n",
+               nread, client_ip, ntohs(client.sin_port), buf);
+
+        // Эхо-ответ
+        if (sendto(sockfd, buf, nread, 0,
+                   (struct sockaddr *)&client, client_len) < 0) {
+            perror("sendto");
+        }
+    }
+
+    close(sockfd);
+    return 0;
 }

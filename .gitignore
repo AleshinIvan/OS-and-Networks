@@ -8,9 +8,16 @@ lab5/src/deadlock_fixed
 lab6/src/server
 lab6/src/client
 
+lab7/src/tcpserver
+lab7/src/tcpclient
+lab7/src/udpserver
+lab7/src/udpclient
+
 # Static/dynamic libraries produced by build
 lab6/src/*.a
 lab6/src/*.so
+lab7/src/*.a
+lab7/src/*.so
 *.a
 *.so
 
